@@ -7,5 +7,9 @@ logs/
 *.log
 *.out
 
+# python
+__pycache__/
+*.pyc
+
 # os cruft
 .DS_Store
