@@ -40,11 +40,11 @@ State lives in `DATA_DIR` (default `~/.local/state/claude-pr-reviewer`):
 You need these working **before** installing — the bot orchestrates them:
 
 1. **Claude Code CLI** — installed and logged in (`claude` on PATH).
-2. **A connected Slack MCP** in Claude Code, with read + reaction access to your
-   channel. Verify: `claude mcp list` shows a Slack server as ✔ Connected. (This
-   is the one prerequisite that isn't a simple package install — set up the Slack
-   integration in Claude Code first. The bot reads the channel and adds reactions
-   through it.)
+2. **A connected Slack MCP** in Claude Code — used to **read** the channel. Verify:
+   `claude mcp list` shows a Slack server as ✔ Connected. (This is the one
+   prerequisite that isn't a simple package install — set up the Slack integration
+   in Claude Code first.) Reactions are separate and optional — see
+   [Slack reactions](#slack-reactions-optional).
 3. **GitHub CLI** — `gh auth status` shows you logged in with the **`repo`** scope
    (needed to post reviews). `gh auth refresh -s repo` if missing.
 4. A **local checkout** of the repo you want reviewed (`REPO_DIR`).
@@ -103,7 +103,27 @@ nohup python3 web/server.py >/dev/null 2>&1 &
 | `READ_COUNT` | Recent channel messages scanned per tick |
 | `CLAUDE_BIN` / `GH_BIN` | CLI paths if not on the service PATH |
 | `WEB_HOST` / `WEB_PORT` | Dashboard bind (keep host on loopback) |
+| `SLACK_BOT_TOKEN` | Optional `xoxb-` token w/ `reactions:write` for 👀/✅/🚫 reactions |
 | `DATA_DIR` | Where state + logs live |
+
+---
+
+## Slack reactions (optional)
+
+The bot marks each request message 👀 while reviewing, then ✅ approved / 🚫 findings.
+Reactions go through the **Slack Web API with your own bot token** — the managed Slack
+MCP connector can't add reactions, so this is done in plain bash (`bin/slack-react.sh`),
+independent of Claude. To enable them:
+
+1. Create a Slack app — https://api.slack.com/apps → **From scratch**, pick your workspace.
+2. **OAuth & Permissions → Bot Token Scopes** → add `reactions:write`.
+3. **Install to Workspace**, copy the **Bot User OAuth Token** (`xoxb-…`).
+4. Invite the bot to your channel: in Slack, `/invite @your-app-name`.
+5. Put it in `.env`: `SLACK_BOT_TOKEN=xoxb-…`, then restart the services.
+
+Test: `bash bin/slack-react.sh add <message_ts> eyes` — returns silently and the 👀
+appears in the channel. Leave `SLACK_BOT_TOKEN` empty to run without reactions
+(reviews still post to GitHub).
 
 ---
 
@@ -154,7 +174,7 @@ launchctl unload ~/Library/LaunchAgents/com.claude-pr-reviewer.web.plist   # sto
 |---|---|
 | `review-<N>.log` empty on a merged PR | Expected — merged PRs get a retrospective, no post |
 | Reviews don't post | `gh auth status` needs `repo` scope; `gh auth refresh -s repo` |
-| No reactions appear | Slack MCP not connected / lacks reaction scope — `claude mcp list` |
+| No reactions appear | `SLACK_BOT_TOKEN` unset, missing `reactions:write`, or bot not invited to the channel |
 | Nothing happens | `bash bin/status.sh`; check `logs/daemon.err`; is it paused (`state/DISABLED`)? |
 | Services die at logout (Linux) | `sudo loginctl enable-linger $USER` |
 | macOS `stat`/`date` errors | You're on an old checkout — the scripts already handle BSD tools |

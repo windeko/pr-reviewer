@@ -14,6 +14,7 @@ REPO_SLUG="${REPO_SLUG:?set REPO_SLUG in .env (owner/name)}"
 REPO_DIR="${REPO_DIR:?set REPO_DIR in .env (local checkout path)}"
 SLACK_CHANNEL="${SLACK_CHANNEL:?set SLACK_CHANNEL in .env}"
 OWN_LOGIN="${OWN_LOGIN:-}"
+SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"   # bot token w/ reactions:write; empty => reactions off
 READ_COUNT="${READ_COUNT:-30}"
 MAX_PER_TICK="${MAX_PER_TICK:-5}"
 INTERVAL_SECS="${INTERVAL_SECS:-180}"
