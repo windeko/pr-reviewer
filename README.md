@@ -110,10 +110,14 @@ nohup python3 web/server.py >/dev/null 2>&1 &
 
 ## Slack reactions (optional)
 
-The bot marks each request message 👀 while reviewing, then ✅ approved / 🚫 findings.
-Reactions go through the **Slack Web API with your own bot token** — the managed Slack
-MCP connector can't add reactions, so this is done in plain bash (`bin/slack-react.sh`),
-independent of Claude. To enable them:
+Two modes, pick by whether you set `SLACK_BOT_TOKEN`:
+
+- **No token (default, zero setup)** — Claude posts a **one-line threaded reply** on the
+  request message (✅ approved / 🚫 changes) through the Slack MCP connector it already uses
+  to read the channel. Nothing to configure.
+- **With a bot token** — real **reactions** (👀 while reviewing, then ✅ / 🚫) via the Slack
+  Web API in plain bash (`bin/slack-react.sh`), since the managed MCP connector can't add
+  reactions. Cleaner/quieter than a reply. To enable:
 
 1. Create a Slack app — https://api.slack.com/apps → **From scratch**, pick your workspace.
 2. **OAuth & Permissions → Bot Token Scopes** → add `reactions:write`.
@@ -122,8 +126,8 @@ independent of Claude. To enable them:
 5. Put it in `.env`: `SLACK_BOT_TOKEN=xoxb-…`, then restart the services.
 
 Test: `bash bin/slack-react.sh add <message_ts> eyes` — returns silently and the 👀
-appears in the channel. Leave `SLACK_BOT_TOKEN` empty to run without reactions
-(reviews still post to GitHub).
+appears in the channel. Leave `SLACK_BOT_TOKEN` empty to use the one-line-reply mode
+instead (reviews always post to GitHub regardless).
 
 ---
 

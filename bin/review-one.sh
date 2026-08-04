@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Review ONE PR end to end. Shared by the tick and the web app.
 #   review-one.sh <PR#> [<slack_ts>] [<label>]
-# With a ts + SLACK_BOT_TOKEN it reacts on the Slack request message via the Slack
-# Web API (deterministic bash, not the connector): 👀 while reviewing, then swaps to
-# ✅ approved / 🚫 findings. After: reads our latest GitHub review state — APPROVED
+# Slack feedback on the request message:
+#   - SLACK_BOT_TOKEN set → real reactions via the Slack Web API (bash, no Claude):
+#     👀 while reviewing, then ✅ approved / 🚫 findings.
+#   - no token → Claude posts one short threaded reply (✅/🚫 one-liner) via the MCP.
+# After: reads our latest GitHub review state — APPROVED
 # unwatches, anything else watches (headSHA + ts) so a later push re-reviews.
 # Per-PR lock prevents double-review.
 set -u
@@ -31,10 +33,17 @@ else
   step2="Review PR $N in $REPO_SLUG for breaking changes: env-var/secret wiring not carried into infra, changed function signatures with stale call sites, removed or renamed exports, DB migration ordering/columns, new IAM/DB/OAuth permissions, and retry/error-classification changes. Investigate the diff AND grep the wider repo for indirect breaks. Then post a GitHub review with the gh CLI: approve if nothing breaks, otherwise a COMMENT review listing the concrete breakages with file:line. Do not edit code."
 fi
 
-botlog "$label #$N start (ts ${ts:-none})"
-react add eyes                                   # 👀 while reviewing
+# No bot token → have Claude post a one-line threaded reply via the Slack MCP
+# (the connector can send messages, just not reactions).
+slack_step=""
+if [ -z "${SLACK_BOT_TOKEN:-}" ] && [ -n "$ts" ]; then
+  slack_step="Then use the Slack MCP to post ONE short threaded reply to the message at thread_ts=$ts in channel $SLACK_CHANNEL: a single line starting with ✅ if you approved (no breaking changes) or 🚫 if you requested changes, then a few words of why and the PR link."
+fi
 
-"$CLAUDE_BIN" -p "$step2 End with a one-line verdict." \
+botlog "$label #$N start (ts ${ts:-none})"
+react add eyes                                   # 👀 while reviewing (no-op without token)
+
+"$CLAUDE_BIN" -p "$step2 $slack_step End with a one-line verdict." \
   --dangerously-skip-permissions --output-format text > "$LOG_DIR/review-$N.log" 2>&1
 rc=$?
 
