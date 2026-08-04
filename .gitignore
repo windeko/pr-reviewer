@@ -1,0 +1,11 @@
+# secrets / local config
+.env
+
+# runtime state + logs (if DATA_DIR is left inside the repo)
+state/
+logs/
+*.log
+*.out
+
+# os cruft
+.DS_Store

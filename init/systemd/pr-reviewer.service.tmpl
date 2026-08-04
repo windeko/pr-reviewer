@@ -1,0 +1,6 @@
+[Unit]
+Description=claude-pr-reviewer tick
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash __ROOT__/bin/tick.sh

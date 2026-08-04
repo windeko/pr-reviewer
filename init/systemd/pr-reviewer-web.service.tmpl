@@ -1,0 +1,10 @@
+[Unit]
+Description=claude-pr-reviewer dashboard
+After=default.target
+
+[Service]
+ExecStart=__PYTHON__ __ROOT__/web/server.py
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=claude-pr-reviewer — run a tick every __INTERVAL__s
+
+[Timer]
+OnActiveSec=30
+OnUnitActiveSec=__INTERVAL__
+Persistent=true
+
+[Install]
+WantedBy=timers.target
