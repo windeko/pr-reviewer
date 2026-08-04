@@ -47,15 +47,25 @@ react add eyes                                   # 👀 while reviewing (no-op w
   --dangerously-skip-permissions --output-format text > "$LOG_DIR/review-$N.log" 2>&1
 rc=$?
 
+# Outcome = our latest GitHub review state + the head SHA. Retry: the review list
+# can lag a second after posting, and a burst of reviews can hit transient gh
+# errors. One query for both fields; head must be present or we don't trust it.
 me="$("$GH_BIN" api user --jq .login 2>/dev/null)"
-state="$("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json reviews --jq --arg me "$me" '[.reviews[]|select(.author.login==$me)]|last|.state' 2>/dev/null)"
-head="$("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json headRefOid --jq .headRefOid 2>/dev/null)"
+state=""; head=""
+for _try in 1 2 3; do
+  read -r head state < <("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json headRefOid,reviews \
+    --jq --arg me "$me" '.headRefOid+" "+(([.reviews[]|select(.author.login==$me)]|last|.state)//"")' 2>/dev/null)
+  [ -n "$head" ] && [ -n "$state" ] && break
+  sleep 2
+done
 
 react remove eyes                                # done reviewing
 if [ "$state" = "APPROVED" ]; then
   react add white_check_mark                     # ✅
   rm -f "$WATCH_DIR/$N"; botlog "$label #$N rc=$rc -> APPROVED (unwatch)"
-else
+elif [ -n "$head" ] && [ -n "$state" ]; then     # definite non-approval → re-review on next push
   react add no_entry_sign                        # 🚫
-  printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"; botlog "$label #$N rc=$rc -> ${state:-nostate} (watch @ ${head:0:8})"
+  printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"; botlog "$label #$N rc=$rc -> $state (watch @ ${head:0:8})"
+else                                             # couldn't determine → do NOT watch (avoids empty-SHA re-review loop)
+  botlog "$label #$N rc=$rc -> outcome undetermined (state='$state' head='${head:0:8}') — not watching"
 fi

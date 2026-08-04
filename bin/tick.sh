@@ -18,6 +18,8 @@ do_review(){ bash "$D/review-one.sh" "$1" "$2" "$3"; }
 for f in "$WATCH_DIR"/*; do
   [ -e "$f" ] || continue
   N=$(basename "$f"); read -r stored_sha stored_ts < "$f" || true
+  # self-heal a corrupt watch file (no reviewed SHA) — otherwise "moved" is always true
+  [ -z "$stored_sha" ] && { rm -f "$f"; botlog "unwatch #$N (corrupt empty-SHA watch file)"; continue; }
   info=$("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json state,headRefOid --jq '.state+" "+.headRefOid' 2>/dev/null)
   [ -z "$info" ] && { botlog "watch #$N: gh read failed, retry next tick"; continue; }
   st=${info%% *}; cur=${info##* }
