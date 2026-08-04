@@ -70,30 +70,46 @@ def ago(epoch):
     return f"{d // 3600}h {d % 3600 // 60}m ago"
 
 
-def watching():
+def watching(limit=25):
     d = os.path.join(STATE, "watching")
     rows = []
     if os.path.isdir(d):
-        for name in sorted(os.listdir(d), key=lambda n: int(n) if n.isdigit() else 0):
-            if not name.isdigit():
-                continue
+        names = sorted((n for n in os.listdir(d) if n.isdigit()), key=int, reverse=True)
+        for name in names[:limit]:
             parts = read(os.path.join(d, name)).split()
             rows.append((name, parts[0][:8] if parts else "?"))
     return rows
 
 
-def recent_reviews(limit=15):
-    out = []
-    if not os.path.isdir(LOGS):
-        return out
-    files = [f for f in os.listdir(LOGS) if re.fullmatch(r"review-\d+\.log", f)]
-    files.sort(key=lambda f: os.path.getmtime(os.path.join(LOGS, f)), reverse=True)
-    for f in files[:limit]:
-        pr = f[len("review-"):-len(".log")]
-        body = read(os.path.join(LOGS, f))
-        verdict = body.splitlines()[-1] if body else "(empty)"
-        out.append((pr, verdict[:160], ago(os.path.getmtime(os.path.join(LOGS, f)))))
-    return out
+def recent_reviews(limit=25):
+    """PR -> (epoch, verdict text). Prefer structured verdict files; fall back to
+    the raw review-log tail for anything reviewed before verdicts existed."""
+    items = {}  # pr -> (epoch, text)
+    vdir = os.path.join(STATE, "verdicts")
+    if os.path.isdir(vdir):
+        for name in os.listdir(vdir):
+            if not name.isdigit():
+                continue
+            body = read(os.path.join(vdir, name))
+            if "\t" not in body:
+                continue
+            ep, txt = body.split("\t", 1)
+            try:
+                ep = int(ep)
+            except ValueError:
+                ep = int(os.path.getmtime(os.path.join(vdir, name)))
+            items[name] = (ep, txt)
+    if os.path.isdir(LOGS):
+        for f in os.listdir(LOGS):
+            m = re.fullmatch(r"review-(\d+)\.log", f)
+            if not m or m.group(1) in items:
+                continue
+            pr = m.group(1)
+            body = read(os.path.join(LOGS, f))
+            line = body.splitlines()[-1] if body else "(empty)"
+            items[pr] = (int(os.path.getmtime(os.path.join(LOGS, f))), f"PR {pr}: {line[:150]}")
+    rows = sorted(items.items(), key=lambda kv: kv[1][0], reverse=True)[:limit]
+    return [(pr, txt, ago(ep)) for pr, (ep, txt) in rows]
 
 
 def page(flash=""):
@@ -103,7 +119,7 @@ def page(flash=""):
     floor = read(os.path.join(STATE, "floor"), os.environ.get("FLOOR", "0"))
     watch = watching()
     reviews = recent_reviews()
-    logtail = "\n".join(read(os.path.join(LOGS, "daemon.log")).splitlines()[-30:])
+    logtail = "\n".join(read(os.path.join(LOGS, "daemon.log")).splitlines()[-200:])
 
     pill = ('<span class="pill bad">PAUSED</span>' if paused
             else '<span class="pill ok">enabled</span>')
@@ -134,7 +150,9 @@ table{{width:100%;border-collapse:collapse;margin:.3rem 0 1.4rem}}
 th,td{{text-align:left;padding:.35rem .5rem;border-bottom:1px solid #8883;vertical-align:top}}
 th{{font-size:.75rem;text-transform:uppercase;color:#888;letter-spacing:.03em}}
 .mono{{font-family:ui-monospace,monospace}} .dim{{color:#999}}
-pre{{background:#8881;padding:.8rem;border-radius:8px;overflow:auto;font-size:12px;max-height:320px}}
+.scroll{{max-height:420px;overflow:auto;border:1px solid #8882;border-radius:8px}}
+.scroll table{{margin:0}} .scroll th{{position:sticky;top:0;background:Canvas}}
+pre{{background:#8881;padding:.8rem;border-radius:8px;overflow:auto;font-size:12px;max-height:460px}}
 .flash{{background:#1f6feb22;border:1px solid #1f6feb88;padding:.5rem .8rem;border-radius:6px;margin-bottom:1rem}}
 a{{color:#1f6feb}}
 </style></head><body>
@@ -147,9 +165,9 @@ a{{color:#1f6feb}}
   <button type="submit">Run review</button>
 </form>
 <h3>Awaiting re-review</h3>
-<table><tr><th>PR</th><th>reviewed SHA</th></tr>{watch_rows}</table>
+<div class="scroll"><table><tr><th>PR</th><th>reviewed SHA</th></tr>{watch_rows}</table></div>
 <h3>Recent reviews</h3>
-<table><tr><th>PR</th><th>verdict</th><th>when</th></tr>{rev_rows}</table>
+<div class="scroll"><table><tr><th>PR</th><th>verdict</th><th>when</th></tr>{rev_rows}</table></div>
 <h3>Log</h3><pre>{html.escape(logtail)}</pre>
 </body></html>"""
 
