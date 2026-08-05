@@ -130,7 +130,7 @@ def page(flash=""):
     reviews = recent_reviews()
     inrev = in_review()
     q = queued()
-    logtail = "\n".join(read(os.path.join(LOGS, "daemon.log")).splitlines()[-200:])
+    logtail = "\n".join(reversed(read(os.path.join(LOGS, "daemon.log")).splitlines()[-200:]))
 
     pill = ('<span class="pill bad">PAUSED</span>' if paused
             else '<span class="pill ok">enabled</span>')
