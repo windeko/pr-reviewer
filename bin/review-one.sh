@@ -54,7 +54,7 @@ reqtime="$(fmt_time "${ts%%.*}" '%Y-%m-%d %H:%M' 2>/dev/null)"
 botlog "$label #$N start — author ${author:-unknown}, request ${reqtime:-n/a}"
 react add eyes                                   # 👀 while reviewing (no-op without token)
 
-"$CLAUDE_BIN" -p "$step2 $slack_step End with a one-line verdict." \
+"$CLAUDE_BIN" -p "$step2 $slack_step End with exactly one final line: \"Verdict: APPROVED — <short reason>\" if you approved the PR, or \"Verdict: CHANGES — <short reason>\" if you requested changes." \
   --dangerously-skip-permissions --output-format text > "$LOG_DIR/review-$N.log" 2>&1
 rc=$?
 
@@ -63,29 +63,42 @@ short="$(tail -n1 "$LOG_DIR/review-$N.log" 2>/dev/null \
   | sed -E 's/[*_`]//g; s/^[[:space:]]*[Vv]erdict:?[[:space:]]*//; s/^PR[[:space:]]*[0-9]+:?[[:space:]]*//; s/^(APPROVED|REJECTED|COMMENTED|CHANGES[_ ]REQUESTED)[ :-]*//; s/^[^A-Za-z0-9]+//' \
   | cut -c1-150)"
 
-# Outcome = our latest GitHub review state + head SHA (retry: review list can lag).
-me="$("$GH_BIN" api user --jq .login 2>/dev/null)"
-state=""; head=""
-for _try in 1 2 3; do
-  read -r head state < <("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json headRefOid,reviews \
-    --jq --arg me "$me" '.headRefOid+" "+(([.reviews[]|select(.author.login==$me)]|last|.state)//"")' 2>/dev/null)
-  [ -n "$head" ] && [ -n "$state" ] && break
-  sleep 2
-done
+# Verdict = the skill's own final "Verdict:" line (authoritative + robust to flaky gh).
+vline="$(grep -iE 'verdict:' "$LOG_DIR/review-$N.log" 2>/dev/null | tail -1 | tr 'A-Z' 'a-z')"
+case "$vline" in
+  *approv*)                              verdict="APPROVED" ;;
+  *chang*|*reject*|*request*|*comment*)  verdict="CHANGES" ;;
+  *)                                     verdict="" ;;
+esac
 
-react remove eyes                                # done reviewing
-if [ "$state" = "APPROVED" ]; then
-  react add white_check_mark                      # ✅
-  rm -f "$WATCH_DIR/$N"
-  write_verdict "✅" "APPROVED" "$short"
-  botlog "$label #$N done — ✅ APPROVED (author ${author:-?})"
-elif [ -n "$head" ] && [ -n "$state" ]; then      # definite non-approval → re-review on next push
-  react add no_entry_sign                         # 🚫
-  printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"
-  write_verdict "🚫" "REJECTED" "$short"
-  botlog "$label #$N done — 🚫 REJECTED ($state, author ${author:-?}, will re-review on push)"
-else                                              # couldn't determine → do NOT watch (avoids empty-SHA loop)
-  word="UNKNOWN"; [ "$rc" -ne 0 ] && word="ERROR"
-  write_verdict "⚠️" "$word" "${short:-could not read GitHub review state after 3 retries}"
-  botlog "$label #$N done — ⚠️ $word: gh review-state unreadable after retries; not watching"
+# head SHA for the watch-list; also a gh review-state fallback if there was no Verdict line.
+me="$("$GH_BIN" api user --jq .login 2>/dev/null)"
+head=""; ghstate=""
+for _try in 1 2 3; do
+  read -r head ghstate < <("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json headRefOid,reviews \
+    --jq --arg me "$me" '.headRefOid+" "+(([.reviews[]|select(.author.login==$me)]|last|.state)//"")' 2>/dev/null)
+  [ -n "$head" ] && break
+  sleep 3
+done
+if [ -z "$verdict" ] && [ -n "$ghstate" ]; then
+  [ "$ghstate" = "APPROVED" ] && verdict="APPROVED" || verdict="CHANGES"
 fi
+
+react remove eyes                                 # done reviewing
+case "$verdict" in
+  APPROVED)
+    react add white_check_mark                     # ✅
+    rm -f "$WATCH_DIR/$N"
+    write_verdict "✅" "APPROVED" "$short"
+    botlog "$label #$N done — ✅ APPROVED (author ${author:-?})" ;;
+  CHANGES)
+    react add no_entry_sign                        # 🚫
+    if [ -n "$head" ]; then printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"
+    else botlog "$label #$N: CHANGES but head SHA unreadable — not watching this round"; fi
+    write_verdict "🚫" "REJECTED" "$short"
+    botlog "$label #$N done — 🚫 REJECTED (author ${author:-?})" ;;
+  *)
+    word="UNKNOWN"; [ "$rc" -ne 0 ] && word="ERROR"
+    write_verdict "⚠️" "$word" "${short:-no Verdict line emitted and gh review-state unreadable}"
+    botlog "$label #$N done — ⚠️ $word (no Verdict line; gh unreadable)" ;;
+esac
