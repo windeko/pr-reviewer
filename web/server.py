@@ -82,13 +82,15 @@ def watching(limit=25):
 
 
 def recent_reviews(limit=25):
-    """PR -> (epoch, verdict text). Prefer structured verdict files; fall back to
-    the raw review-log tail for anything reviewed before verdicts existed."""
+    """Finished review cycles only — one per verdict file (written as the review's
+    last step). PRs currently running have no verdict file yet, so they don't show
+    here; a re-review in flight is excluded too (its lock is held)."""
     items = {}  # pr -> (epoch, text)
+    active = set(in_review())
     vdir = os.path.join(STATE, "verdicts")
     if os.path.isdir(vdir):
         for name in os.listdir(vdir):
-            if not name.isdigit():
+            if not name.isdigit() or int(name) in active:
                 continue
             body = read(os.path.join(vdir, name))
             if "\t" not in body:
@@ -99,15 +101,6 @@ def recent_reviews(limit=25):
             except ValueError:
                 ep = int(os.path.getmtime(os.path.join(vdir, name)))
             items[name] = (ep, txt)
-    if os.path.isdir(LOGS):
-        for f in os.listdir(LOGS):
-            m = re.fullmatch(r"review-(\d+)\.log", f)
-            if not m or m.group(1) in items:
-                continue
-            pr = m.group(1)
-            body = read(os.path.join(LOGS, f))
-            line = body.splitlines()[-1] if body else "(empty)"
-            items[pr] = (int(os.path.getmtime(os.path.join(LOGS, f))), f"PR {pr}: {line[:150]}")
     rows = sorted(items.items(), key=lambda kv: kv[1][0], reverse=True)[:limit]
     return [(pr, txt, ago(ep)) for pr, (ep, txt) in rows]
 
