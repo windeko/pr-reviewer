@@ -152,7 +152,7 @@ def page(flash=""):
     ) or '<tr><td colspan="3" class="dim">no reviews yet</td></tr>'
     queue_rows = "".join(
         f'<tr><td><a href="https://github.com/{SLUG}/pull/{pr}" target="_blank">#{pr}</a></td>'
-        f'<td>⏳ reviewing…</td></tr>' for pr in inrev
+        f'<td>⏳ running</td></tr>' for pr in inrev
     ) + "".join(
         f'<tr><td><a href="https://github.com/{SLUG}/pull/{pr}" target="_blank">#{pr}</a></td>'
         f'<td class="dim">queued</td></tr>' for pr in q
