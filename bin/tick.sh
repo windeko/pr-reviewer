@@ -18,12 +18,15 @@ do_review(){ bash "$D/review-one.sh" "$1" "$2" "$3"; }
 for f in "$WATCH_DIR"/*; do
   [ -e "$f" ] || continue
   N=$(basename "$f"); read -r stored_sha stored_ts < "$f" || true
-  # self-heal a corrupt watch file (no reviewed SHA) — otherwise "moved" is always true
-  [ -z "$stored_sha" ] && { rm -f "$f"; botlog "unwatch #$N (corrupt empty-SHA watch file)"; continue; }
   info=$("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json state,headRefOid --jq '.state+" "+.headRefOid' 2>/dev/null)
   [ -z "$info" ] && { botlog "watch #$N: gh read failed, retry next tick"; continue; }
   st=${info%% *}; cur=${info##* }
   if [ "$st" != "OPEN" ]; then rm -f "$f"; botlog "unwatch #$N (state $st)"; continue; fi
+  # not yet baselined (reject couldn't read head at review time) → adopt current head, no re-review
+  if [ -z "$stored_sha" ]; then
+    [ -n "$cur" ] && { printf '%s %s\n' "$cur" "$stored_ts" > "$f"; botlog "watch #$N baselined @ ${cur:0:8}"; }
+    continue
+  fi
   if [ -n "$cur" ] && [ "$cur" != "$stored_sha" ]; then
     [ "$budget" -le 0 ] && { botlog "re-review #$N deferred (cap)"; continue; }
     budget=$((budget-1)); do_review "$N" "$stored_ts" "re-review"

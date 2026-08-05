@@ -93,8 +93,10 @@ case "$verdict" in
     botlog "$label #$N done — ✅ APPROVED (author ${author:-?})" ;;
   CHANGES)
     react add no_entry_sign                        # 🚫
-    if [ -n "$head" ]; then printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"
-    else botlog "$label #$N: CHANGES but head SHA unreadable — not watching this round"; fi
+    # always arm for re-review; if head unreadable now (flaky gh), store empty → the
+    # rescan baselines it to the current head next tick (never silently un-armed).
+    printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"
+    [ -z "$head" ] && botlog "$label #$N: CHANGES, head SHA unreadable — armed, rescan will baseline"
     write_verdict "🚫" "REJECTED" "$short"
     botlog "$label #$N done — 🚫 REJECTED (author ${author:-?})" ;;
   *)
