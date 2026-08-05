@@ -23,7 +23,12 @@ command -v "${CLAUDE_BIN:-claude}" >/dev/null || echo "?? ${CLAUDE_BIN:-claude} 
 mkdir -p "$DATA_DIR/state/watching" "$DATA_DIR/logs"
 chmod +x bin/*.sh 2>/dev/null || true
 
-render(){ sed -e "s|__ROOT__|$ROOT|g" -e "s|__PYTHON__|$PY|g" -e "s|__INTERVAL__|$INTERVAL|g" -e "s|__DATA__|$DATA_DIR|g" "$1"; }
+# dirs of gh & claude, so the service PATH can find them (systemd/launchd PATH is minimal)
+CDIR="$(dirname "$(command -v "${CLAUDE_BIN:-claude}" 2>/dev/null || echo /usr/bin/claude)")"
+GDIR="$(dirname "$(command -v "${GH_BIN:-gh}" 2>/dev/null || echo /usr/bin/gh)")"
+BINPATH="$CDIR:$GDIR:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+
+render(){ sed -e "s|__ROOT__|$ROOT|g" -e "s|__PYTHON__|$PY|g" -e "s|__INTERVAL__|$INTERVAL|g" -e "s|__DATA__|$DATA_DIR|g" -e "s|__BINPATH__|$BINPATH|g" "$1"; }
 
 if [ "${1:-}" = "--set-floor" ]; then
   max="$("${GH_BIN:-gh}" pr list --repo "$REPO_SLUG" --state all --limit 1 --json number --jq '.[0].number' 2>/dev/null || echo 0)"

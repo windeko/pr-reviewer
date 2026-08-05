@@ -3,4 +3,6 @@ Description=claude-pr-reviewer tick
 
 [Service]
 Type=oneshot
+# systemd's minimal PATH omits ~/.local/bin etc. — include the dirs of gh & claude
+Environment=PATH=__BINPATH__
 ExecStart=/usr/bin/env bash __ROOT__/bin/tick.sh
