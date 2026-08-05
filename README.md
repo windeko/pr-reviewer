@@ -62,22 +62,42 @@ You need these working **before** installing — the bot orchestrates them:
 ```bash
 git clone https://github.com/windeko/pr-reviewer.git
 cd pr-reviewer
-cp .env.example .env
-$EDITOR .env            # fill in REPO_SLUG, REPO_DIR, SLACK_CHANNEL, OWN_LOGIN
+cp .env.example .env                       # shared defaults: CLIs, OWN_LOGIN, cadence, web
+$EDITOR .env
+cp instances/example.env instances/myrepo.env   # one file per repo
+$EDITOR instances/myrepo.env               # REPO_SLUG, REPO_DIR, SLACK_CHANNEL
 ./install.sh --set-floor
 ```
 
-`--set-floor` records the repo's current max PR number so the bot ignores the
+Config is split: **`.env`** holds shared settings (CLI paths, `OWN_LOGIN`, cadence,
+web bind, Slack token), and **`instances/<name>.env`** holds one repo's settings.
+Each repo gets isolated state under `STATE_ROOT/<name>`.
+
+`--set-floor` records each repo's current max PR number so the bot ignores the
 existing backlog and only reviews PRs opened from now on. Drop it to review every
 open request it sees (respecting `MAX_PER_TICK`).
 
 `install.sh` detects your OS:
 
-- **Linux** → installs `systemd --user` units, enables lingering (so they survive
-  logout/reboot), starts the timer + dashboard.
-- **macOS** → installs launchd agents in `~/Library/LaunchAgents` and loads them.
+- **Linux** → `systemd --user` template timer per repo (`pr-reviewer@<name>`) + one web
+  service, lingering enabled (survive logout/reboot).
+- **macOS** → launchd agents in `~/Library/LaunchAgents` (one tick agent per repo + web).
 
-Then open the dashboard: **http://127.0.0.1:8787**
+Then open the dashboard: **http://127.0.0.1:8787** (one page, a tab per repo).
+
+### Multiple repositories
+
+Add another repo any time — one channel per repo:
+
+```bash
+cp instances/example.env instances/otherrepo.env
+$EDITOR instances/otherrepo.env            # its own REPO_SLUG / REPO_DIR / SLACK_CHANNEL
+./install.sh otherrepo --set-floor         # enable just that repo (web already running)
+```
+
+Each repo runs its own tick with isolated state (PR numbers never collide across
+repos), and all show up as tabs on the single dashboard. `./install.sh` with no name
+refreshes every repo.
 
 ### No systemd / launchd? Run the loop directly
 
@@ -88,24 +108,35 @@ nohup python3 web/server.py >/dev/null 2>&1 &
 
 ---
 
-## Configuration (`.env`)
+## Configuration
+
+**`instances/<name>.env`** — one per repo:
 
 | Key | Meaning |
 |---|---|
 | `REPO_SLUG` | GitHub repo as `owner/name` (required) |
 | `REPO_DIR` | Local checkout — review greps/reads files here (required) |
-| `SLACK_CHANNEL` | Channel ID of your PR-review-request channel (required) |
+| `SLACK_CHANNEL` | Channel ID of this repo's PR-review-request channel (required) |
+| `FLOOR` | Ignore PRs `<=` this number (backlog guard). `state/floor` overrides |
+| `DATA_DIR` | Optional — override the default `STATE_ROOT/<name>` state dir |
+
+**`.env`** — shared across all repos:
+
+| Key | Meaning |
+|---|---|
 | `OWN_LOGIN` | Your GitHub login — bot skips your own PRs. Empty = review all |
 | `REVIEW_SKILL` | A Claude Code skill to drive the review. Empty = built-in breaking-change prompt |
-| `FLOOR` | Ignore PRs `<=` this number (backlog guard). `state/floor` overrides |
+| `SLACK_BOT_TOKEN` | Optional `xoxb-` token w/ `reactions:write` for 👀/✅/🚫 reactions |
 | `MAX_PER_TICK` | Cap reviews launched per tick (new + re-reviews) |
 | `INTERVAL_SECS` | Seconds between ticks (loop/launchd; systemd uses it too) |
 | `READ_COUNT` | Recent channel messages scanned per tick |
-| `CLAUDE_BIN` / `GH_BIN` | CLI paths if not on the service PATH |
-| `WEB_HOST` / `WEB_PORT` | Dashboard bind (keep host on loopback) |
-| `SLACK_BOT_TOKEN` | Optional `xoxb-` token w/ `reactions:write` for 👀/✅/🚫 reactions |
-| `DATA_DIR` | Where state + logs live |
+| `CLAUDE_BIN` / `GH_BIN` | **Absolute** CLI paths (services run with a minimal PATH) |
+| `STATE_ROOT` | Base dir for per-repo state (`STATE_ROOT/<name>`) |
+| `WEB_HOST` / `WEB_PORT` | Dashboard bind |
 
+(Any shared key can be overridden per-repo by setting it in the instance file. A
+key that was previously in `.env`, like `SLACK_BOT_TOKEN`, also works there.)
+| `WEB_HOST` / `WEB_PORT` | Dashboard bind (keep host on loopback) |
 ---
 
 ## Slack reactions (optional)

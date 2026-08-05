@@ -6,13 +6,23 @@ set -u
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$LIB_DIR/.." && pwd)"
 
-# load .env (KEY=VALUE lines) into the environment
+# load .env (shared defaults: CLIs, login, cadence, web, STATE_ROOT)
 if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
 
-# ── config (env / .env, with defaults) ──────────────────────────────────────
-REPO_SLUG="${REPO_SLUG:?set REPO_SLUG in .env (owner/name)}"
-REPO_DIR="${REPO_DIR:?set REPO_DIR in .env (local checkout path)}"
-SLACK_CHANNEL="${SLACK_CHANNEL:?set SLACK_CHANNEL in .env}"
+# per-repo instance (multi-repo). PRR_INSTANCE=<name> loads instances/<name>.env,
+# which sets the repo-specific keys (REPO_SLUG/REPO_DIR/SLACK_CHANNEL/FLOOR/…).
+# Without it the bot is single-repo and reads everything from .env (backward compatible).
+INSTANCE="${PRR_INSTANCE:-}"
+if [ -n "$INSTANCE" ]; then
+  _inst="$ROOT/instances/$INSTANCE.env"
+  [ -f "$_inst" ] || { echo "pr-reviewer: no instance file $_inst" >&2; exit 1; }
+  set -a; . "$_inst"; set +a
+fi
+
+# ── config (.env / instance, with defaults) ─────────────────────────────────
+REPO_SLUG="${REPO_SLUG:?set REPO_SLUG (in .env or the instance file)}"
+REPO_DIR="${REPO_DIR:?set REPO_DIR (local checkout path)}"
+SLACK_CHANNEL="${SLACK_CHANNEL:?set SLACK_CHANNEL}"
 OWN_LOGIN="${OWN_LOGIN:-}"
 SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"   # bot token w/ reactions:write; empty => reactions off
 READ_COUNT="${READ_COUNT:-30}"
@@ -23,8 +33,13 @@ GH_BIN="${GH_BIN:-gh}"
 REVIEW_SKILL="${REVIEW_SKILL:-}"
 WEB_HOST="${WEB_HOST:-127.0.0.1}"
 WEB_PORT="${WEB_PORT:-8787}"
-DATA_DIR="${DATA_DIR:-$HOME/.local/state/claude-pr-reviewer}"
 LOCK_STALE_SECS="${LOCK_STALE_SECS:-900}"
+
+# state dir: an explicit DATA_DIR (from .env or instance) wins; else STATE_ROOT[/instance]
+STATE_ROOT="${STATE_ROOT:-$HOME/.local/state/claude-pr-reviewer}"; STATE_ROOT="${STATE_ROOT/#\~/$HOME}"
+if [ -z "${DATA_DIR:-}" ]; then
+  [ -n "$INSTANCE" ] && DATA_DIR="$STATE_ROOT/$INSTANCE" || DATA_DIR="$STATE_ROOT"
+fi
 
 # expand a leading ~ (env files don't do tilde expansion)
 DATA_DIR="${DATA_DIR/#\~/$HOME}"

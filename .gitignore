@@ -1,5 +1,7 @@
 # secrets / local config
 .env
+instances/*.env
+!instances/example.env
 
 # runtime state + logs (if DATA_DIR is left inside the repo)
 state/

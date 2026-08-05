@@ -2,14 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.claude-pr-reviewer.tick</string>
+  <key>Label</key><string>com.claude-pr-reviewer.tick.__INSTANCE__</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
     <string>__ROOT__/bin/tick.sh</string>
   </array>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>__BINPATH__</string></dict>
+  <dict><key>PATH</key><string>__BINPATH__</string><key>PRR_INSTANCE</key><string>__INSTANCE__</string></dict>
   <key>StartInterval</key><integer>__INTERVAL__</integer>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>__DATA__/logs/launchd.tick.out</string>
