@@ -41,7 +41,7 @@ fi
 if [ -n "$REVIEW_SKILL" ]; then
   step2="Invoke the $REVIEW_SKILL skill for PR $N in $REPO_SLUG and follow it fully to completion."
 else
-  step2="Review PR $N in $REPO_SLUG for breaking changes: env-var/secret wiring not carried into infra, changed function signatures with stale call sites, removed or renamed exports, DB migration ordering/columns, new IAM/DB/OAuth permissions, and retry/error-classification changes. Investigate the diff AND grep the wider repo for indirect breaks. Then post a GitHub review with the gh CLI: approve if nothing breaks, otherwise a COMMENT review listing the concrete breakages with file:line. Do not edit code."
+  step2="Review PR $N in $REPO_SLUG for breaking changes: env-var/secret wiring not carried into infra, changed function signatures with stale call sites, removed or renamed exports, DB migration ordering/columns, new IAM/DB/OAuth permissions, and retry/error-classification changes. Investigate the diff AND grep the wider repo for indirect breaks. Then post a GitHub review with the gh CLI: approve if nothing breaks, otherwise a REQUEST_CHANGES review listing the concrete breakages with file:line. Do not edit code."
 fi
 
 # No bot token → have Claude post a one-line threaded reply via the Slack MCP.
@@ -60,7 +60,7 @@ rc=$?
 
 # short description = cleaned last line of the review output
 short="$(tail -n1 "$LOG_DIR/review-$N.log" 2>/dev/null \
-  | sed -E 's/[*_`]//g; s/^[[:space:]]*[Vv]erdict:?[[:space:]]*//; s/^PR[[:space:]]*[0-9]+:?[[:space:]]*//; s/^(APPROVED|REJECTED|COMMENTED|CHANGES[_ ]REQUESTED)[ :-]*//; s/^[^A-Za-z0-9]+//' \
+  | sed -E 's/[*_`]//g; s/^[[:space:]]*[Vv]erdict:?[[:space:]]*//; s/^PR[[:space:]]*[0-9]+:?[[:space:]]*//; s/^(APPROVED|REJECTED|COMMENTED|CHANGES([_ ]REQUESTED)?)[ :-]*//; s/^[^A-Za-z0-9]+//' \
   | cut -c1-150)"
 
 # Verdict = the skill's own final "Verdict:" line (authoritative + robust to flaky gh).

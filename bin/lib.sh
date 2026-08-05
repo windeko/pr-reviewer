@@ -39,6 +39,7 @@ SEEN="$STATE_DIR/seen_prs.txt"      # handled PR numbers
 LOCK="$STATE_DIR/tick.lock"         # atomic mkdir mutex; mtime = acquire time
 DISABLED="$STATE_DIR/DISABLED"      # presence => paused
 FLOOR_FILE="$STATE_DIR/floor"       # ignore PRs <= this
+QUEUE_FILE="$STATE_DIR/queue"       # PRs found awaiting review (uncapped), refreshed each tick
 mkdir -p "$WATCH_DIR" "$VERDICT_DIR" "$LOG_DIR" 2>/dev/null || true
 touch "$SEEN" 2>/dev/null || true
 

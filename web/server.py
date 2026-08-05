@@ -112,6 +112,22 @@ def recent_reviews(limit=25):
     return [(pr, txt, ago(ep)) for pr, (ep, txt) in rows]
 
 
+def in_review():
+    """PRs with an active per-PR review lock (being reviewed right now)."""
+    if not os.path.isdir(STATE):
+        return []
+    out = [int(m.group(1)) for n in os.listdir(STATE)
+           if (m := re.fullmatch(r"review-(\d+)\.lock", n))]
+    return sorted(out)
+
+
+def queued():
+    """PRs found in the channel awaiting review, minus the ones in flight."""
+    nums = sorted({int(x) for x in re.findall(r"\d+", read(os.path.join(STATE, "queue")))})
+    active = set(in_review())
+    return [n for n in nums if n not in active]
+
+
 def page(flash=""):
     paused = os.path.exists(os.path.join(STATE, "DISABLED"))
     last = ago(read(os.path.join(STATE, "last_tick"), "0"))
@@ -119,6 +135,8 @@ def page(flash=""):
     floor = read(os.path.join(STATE, "floor"), os.environ.get("FLOOR", "0"))
     watch = watching()
     reviews = recent_reviews()
+    inrev = in_review()
+    q = queued()
     logtail = "\n".join(read(os.path.join(LOGS, "daemon.log")).splitlines()[-200:])
 
     pill = ('<span class="pill bad">PAUSED</span>' if paused
@@ -132,6 +150,13 @@ def page(flash=""):
         f'<td>{html.escape(v)}</td><td class="dim">{when}</td></tr>'
         for pr, v, when in reviews
     ) or '<tr><td colspan="3" class="dim">no reviews yet</td></tr>'
+    queue_rows = "".join(
+        f'<tr><td><a href="https://github.com/{SLUG}/pull/{pr}" target="_blank">#{pr}</a></td>'
+        f'<td>⏳ reviewing…</td></tr>' for pr in inrev
+    ) + "".join(
+        f'<tr><td><a href="https://github.com/{SLUG}/pull/{pr}" target="_blank">#{pr}</a></td>'
+        f'<td class="dim">queued</td></tr>' for pr in q
+    ) or '<tr><td colspan="2" class="dim">queue empty</td></tr>'
     flash_html = f'<div class="flash">{html.escape(flash)}</div>' if flash else ""
 
     return f"""<!doctype html><html><head><meta charset="utf-8">
@@ -159,12 +184,14 @@ a{{color:#1f6feb}}
 </style></head><body>
 <h1>PR-review bot <span class="dim" style="font-size:.8rem">{html.escape(SLUG)}</span></h1>
 <div class="bar">{pill}<span>last tick {last}</span><span>handled {handled}</span>
-<span>floor {html.escape(str(floor))}</span><span>watching {len(watch)}</span></div>
+<span>floor {html.escape(str(floor))}</span><span>queue {len(inrev) + len(q)}</span><span>watching {len(watch)}</span></div>
 {flash_html}
 <form method="post" action="/run">
   <input type="number" name="pr" placeholder="PR number — e.g. 2140" min="1" required>
   <button type="submit">Run review</button>
 </form>
+<h3>Review queue</h3>
+<div class="scroll"><table><tr><th>PR</th><th>status</th></tr>{queue_rows}</table></div>
 <h3>Awaiting re-review</h3>
 <div class="scroll"><table><tr><th>PR</th><th>reviewed SHA</th></tr>{watch_rows}</table></div>
 <h3>Recent reviews</h3>

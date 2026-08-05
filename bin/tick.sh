@@ -38,9 +38,13 @@ tsmap="$(mktemp)"; trap 'rm -f "$tsmap"; bash "$D/tick-done.sh" >/dev/null 2>&1'
 printf '%s\n' "$raw" | grep -oE 'PR=[0-9]+ TS=[0-9.]+' \
   | sed -E 's/PR=([0-9]+) TS=([0-9.]+)/\1 \2/' | sort -un > "$tsmap"
 nums=$(awk '{print $1}' "$tsmap")
-if [ -z "$nums" ]; then botlog "read: 0 PR numbers (raw: $(printf '%s' "$raw" | tr '\n' ' ' | head -c140))"; exit 0; fi
+if [ -z "$nums" ]; then botlog "read: 0 PR numbers (raw: $(printf '%s' "$raw" | tr '\n' ' ' | head -c140))"; : > "$QUEUE_FILE"; exit 0; fi
 
-new=$(bash "$D/new-prs.sh" $nums)
+# pending = every request PR > floor not yet handled (uncapped) — this is the review queue
+pending=$(printf '%s\n' $nums | grep -oE '[0-9]+' | sort -un | awk -v f="$FLOOR" '$1+0 > f+0' | comm -23 - <(sort -un "$SEEN"))
+printf '%s\n' $pending | grep -oE '[0-9]+' > "$QUEUE_FILE"
+
+new=$(printf '%s\n' $pending | grep -oE '[0-9]+' | head -n "$MAX_PER_TICK")   # this tick's batch
 [ -z "$new" ] && exit 0
 botlog "new: $(echo $new | tr '\n' ' ')"
 bash "$D/mark-handled.sh" $new >/dev/null
