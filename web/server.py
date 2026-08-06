@@ -183,7 +183,7 @@ def page(active, flash=""):
     ) or '<tr><td colspan="3" class="dim">nothing awaiting re-review</td></tr>'
     rev_rows = "".join(
         f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(author or "—")}</td><td>{html.escape(v)}</td>'
-        f'<td class="dim">{when}</td></tr>' for pr, author, v, when in reviews
+        f'<td class="dim nowrap">{when}</td></tr>' for pr, author, v, when in reviews
     ) or '<tr><td colspan="4" class="dim">no reviews yet</td></tr>'
     flash_html = f'<div class="flash">{html.escape(flash)}</div>' if flash else ""
 
@@ -203,8 +203,9 @@ h1{{font-size:1.3rem;margin:0 0 .3rem}} h3{{margin:1.4rem 0 .3rem}}
 form{{display:flex;gap:.5rem;margin:1rem 0;padding:1rem;border:1px solid #8884;border-radius:8px}}
 input[type=number]{{flex:1;padding:.5rem;font:inherit;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}}
 button{{padding:.5rem 1rem;font:inherit;font-weight:600;border:0;border-radius:6px;background:#1f6feb;color:#fff;cursor:pointer}}
-table{{width:100%;border-collapse:collapse;margin:.3rem 0 1.4rem}}
-th,td{{text-align:left;padding:.35rem .5rem;border-bottom:1px solid #8883;vertical-align:top}}
+table{{width:100%;border-collapse:collapse;margin:.3rem 0 1.4rem;table-layout:fixed}}
+th,td{{text-align:left;padding:.35rem .5rem;border-bottom:1px solid #8883;vertical-align:top;overflow-wrap:anywhere}}
+.nowrap{{white-space:nowrap}}
 th{{font-size:.75rem;text-transform:uppercase;color:#888;letter-spacing:.03em}}
 .mono{{font-family:ui-monospace,monospace}} .dim{{color:#999}}
 .scroll{{max-height:420px;overflow:auto;border:1px solid #8882;border-radius:8px}}
@@ -224,11 +225,11 @@ a{{color:#1f6feb}}
   <button type="submit">Run review</button>
 </form>
 <h3>Review queue</h3>
-<div class="scroll"><table><tr><th>PR</th><th>author</th><th>status</th></tr>{queue_rows}</table></div>
+<div class="scroll"><table><colgroup><col style="width:64px"><col style="width:140px"><col></colgroup><tr><th>PR</th><th>author</th><th>status</th></tr>{queue_rows}</table></div>
 <h3>Awaiting re-review</h3>
-<div class="scroll"><table><tr><th>PR</th><th>author</th><th>reviewed SHA</th></tr>{watch_rows}</table></div>
+<div class="scroll"><table><colgroup><col style="width:64px"><col style="width:140px"><col></colgroup><tr><th>PR</th><th>author</th><th>reviewed SHA</th></tr>{watch_rows}</table></div>
 <h3>Recent reviews</h3>
-<div class="scroll"><table><tr><th>PR</th><th>author</th><th>verdict</th><th>when</th></tr>{rev_rows}</table></div>
+<div class="scroll"><table><colgroup><col style="width:64px"><col style="width:130px"><col><col style="width:96px"></colgroup><tr><th>PR</th><th>author</th><th>verdict</th><th class="nowrap">when</th></tr>{rev_rows}</table></div>
 <h3>Log</h3><pre>{html.escape(logtail)}</pre>
 </body></html>"""
 
