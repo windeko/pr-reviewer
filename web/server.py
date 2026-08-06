@@ -89,10 +89,15 @@ def in_review(st):
                   if (m := re.fullmatch(r"review-(\d+)\.lock", n)))
 
 
-def queued(st):
-    nums = sorted({int(x) for x in re.findall(r"\d+", read(os.path.join(st, "queue")))})
+def queue_items(st):
+    """[(pr, status)] from the queue file, excluding in-flight (lock) PRs."""
     active = set(in_review(st))
-    return [n for n in nums if n not in active]
+    out = []
+    for line in read(os.path.join(st, "queue")).splitlines():
+        p = line.split()
+        if p and p[0].isdigit() and int(p[0]) not in active:
+            out.append((int(p[0]), p[1] if len(p) > 1 else "waiting"))
+    return out
 
 
 def watching(st, limit=25):
@@ -165,7 +170,9 @@ def page(active, flash=""):
     watch = watching(st)
     reviews = recent_reviews(st)
     inrev = in_review(st)
-    q = queued(st)
+    items = queue_items(st)
+    ready = [pr for pr, s in items if s in ("green", "none", "waiting")]
+    ci_wait = [(pr, s) for pr, s in items if s in ("pending", "failing", "unknown")]
     logtail = "\n".join(reversed(read(os.path.join(lg, "daemon.log")).splitlines()[-200:]))
 
     pill = ('<span class="pill bad">PAUSED</span>' if paused
@@ -177,8 +184,13 @@ def page(active, flash=""):
     queue_rows = "".join(
         f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td><td>⏳ running</td></tr>' for pr in inrev
     ) + "".join(
-        f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td><td class="dim">queued</td></tr>' for pr in q
+        f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td><td class="dim">queued</td></tr>' for pr in ready
     ) or '<tr><td colspan="3" class="dim">queue empty</td></tr>'
+    cilab = {"pending": "⏳ CI pending", "failing": "🚫 CI failing", "unknown": "❔ CI unknown"}
+    ci_rows = "".join(
+        f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td><td>{cilab.get(s, s)}</td></tr>'
+        for pr, s in ci_wait
+    ) or '<tr><td colspan="3" class="dim">nothing waiting on CI</td></tr>'
     watch_rows = "".join(
         f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td><td class="mono">{sha}</td></tr>'
         for pr, sha in watch
@@ -219,7 +231,7 @@ a{{color:#1f6feb}}
 <h1>PR-review bot <span class="dim" style="font-size:.8rem">{html.escape(slug)}</span></h1>
 <div class="tabs">{tabs}</div>
 <div class="bar">{pill}<span>last tick {last}</span><span>handled {handled}</span>
-<span>floor {html.escape(str(floor))}</span><span>queue {len(inrev) + len(q)}</span><span>watching {len(watch)}</span></div>
+<span>floor {html.escape(str(floor))}</span><span>queue {len(inrev) + len(ready)}</span><span>CI-wait {len(ci_wait)}</span><span>watching {len(watch)}</span></div>
 {flash_html}
 <form method="post" action="/run">
   <input type="hidden" name="repo" value="{html.escape(active)}">
@@ -228,6 +240,8 @@ a{{color:#1f6feb}}
 </form>
 <h3>Review queue</h3>
 <div class="scroll"><table><colgroup><col style="width:64px"><col style="width:140px"><col></colgroup><tr><th>PR</th><th>author</th><th>status</th></tr>{queue_rows}</table></div>
+<h3>Waiting for CI</h3>
+<div class="scroll"><table><colgroup><col style="width:64px"><col style="width:140px"><col></colgroup><tr><th>PR</th><th>author</th><th>CI</th></tr>{ci_rows}</table></div>
 <h3>Awaiting re-review</h3>
 <div class="scroll"><table><colgroup><col style="width:64px"><col style="width:140px"><col></colgroup><tr><th>PR</th><th>author</th><th>reviewed SHA</th></tr>{watch_rows}</table></div>
 <h3>Recent reviews</h3>

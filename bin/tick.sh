@@ -29,6 +29,8 @@ for f in "$WATCH_DIR"/*; do
   fi
   if [ -n "$cur" ] && [ "$cur" != "$stored_sha" ]; then
     [ "$budget" -le 0 ] && { botlog "re-review #$N deferred (cap)"; continue; }
+    ci="$(ci_state "$N")"
+    case "$ci" in green|none) ;; *) botlog "re-review #$N held — CI $ci"; continue;; esac
     budget=$((budget-1)); do_review "$N" "$stored_ts" "re-review" "$cur"
   fi
 done
@@ -45,17 +47,25 @@ if [ -z "$nums" ]; then botlog "read: 0 PR numbers (raw: $(printf '%s' "$raw" | 
 
 # pending = every request PR > floor not yet handled (uncapped) — this is the review queue
 pending=$(printf '%s\n' $nums | grep -oE '[0-9]+' | sort -un | awk -v f="$FLOOR" '$1+0 > f+0' | comm -23 - <(sort -un "$SEEN"))
-printf '%s\n' $pending | grep -oE '[0-9]+' > "$QUEUE_FILE"
+[ -z "$pending" ] && { : > "$QUEUE_FILE"; exit 0; }
 
-new=$(printf '%s\n' $pending | grep -oE '[0-9]+' | head -n "$MAX_PER_TICK")   # this tick's batch
-[ -z "$new" ] && exit 0
-botlog "new: $(echo $new | tr '\n' ' ')"
-bash "$D/mark-handled.sh" $new >/dev/null
-
-for N in $new; do
-  [ "$budget" -le 0 ] && { botlog "review #$N deferred (cap)"; continue; }
-  ts=$(awk -v n="$N" '$1==n{print $2; exit}' "$tsmap")
-  budget=$((budget-1))
-  do_review "$N" "$ts" "review"
+# Review only CI-green PRs. Iterate candidates (not a pre-capped slice) so a green PR
+# isn't blocked behind pending ones; cap CI probes to bound gh calls. A not-green PR
+# (pending/failing/unknown) is left UNSEEN → re-checked next tick. Record each PR's
+# status into the queue file (`<PR> <status>`) so the dashboard shows *why* it waits.
+qtmp="$(mktemp)"; checks=0; CHECK_CAP=$(( MAX_PER_TICK * 4 ))
+for N in $(printf '%s\n' $pending | grep -oE '[0-9]+'); do
+  status="waiting"
+  if [ "$budget" -gt 0 ] && [ "$checks" -lt "$CHECK_CAP" ]; then
+    checks=$((checks+1)); ci="$(ci_state "$N")"; status="$ci"
+    case "$ci" in
+      green|none)
+        ts=$(awk -v n="$N" '$1==n{print $2; exit}' "$tsmap")
+        budget=$((budget-1)); do_review "$N" "$ts" "review"; bash "$D/mark-handled.sh" "$N" >/dev/null ;;
+      *) botlog "hold #$N — CI $ci" ;;
+    esac
+  fi
+  printf '%s %s\n' "$N" "$status" >> "$qtmp"
 done
+mv "$qtmp" "$QUEUE_FILE"
 botlog "tick complete"

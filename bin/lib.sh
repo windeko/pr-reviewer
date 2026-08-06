@@ -68,3 +68,20 @@ botlog(){ echo "[$(date '+%F %T')] $*" >> "$LOG_DIR/daemon.log"; }
 stat_mtime(){ stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
 # format an epoch, portable. $2 = strftime (default full timestamp)
 fmt_time(){ date -d "@$1" "+${2:-%Y-%m-%d %H:%M:%S}" 2>/dev/null || date -r "$1" "+${2:-%Y-%m-%d %H:%M:%S}" 2>/dev/null; }
+# CI rollup state for a PR: green | none | pending | failing | unknown (gh error/outage).
+# "green" and "none" (no checks) are reviewable; everything else means "not ready — skip".
+ci_state(){
+  local out
+  out="$("$GH_BIN" pr view "$1" --repo "$REPO_SLUG" --json statusCheckRollup --jq '
+    (.statusCheckRollup // []) as $c
+    | if ($c|length)==0 then "none"
+      elif any($c[]; ((.status // "COMPLETED")|ascii_upcase) as $s
+                     | ($s=="IN_PROGRESS" or $s=="QUEUED" or $s=="PENDING" or $s=="WAITING")
+                       or ((.state // "")|ascii_upcase)=="PENDING") then "pending"
+      elif any($c[]; ((.conclusion // .state // "")|ascii_upcase) as $r
+                     | ($r=="FAILURE" or $r=="ERROR" or $r=="TIMED_OUT" or $r=="CANCELLED"
+                        or $r=="ACTION_REQUIRED" or $r=="STARTUP_FAILURE")) then "failing"
+      else "green" end' 2>/dev/null)"
+  echo "${out:-unknown}"
+}
+ci_reviewable(){ case "$(ci_state "$1")" in green|none) return 0;; *) return 1;; esac; }
