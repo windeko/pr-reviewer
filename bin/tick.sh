@@ -43,29 +43,38 @@ tsmap="$(mktemp)"; trap 'rm -f "$tsmap"; bash "$D/tick-done.sh" >/dev/null 2>&1'
 printf '%s\n' "$raw" | grep -oE 'PR=[0-9]+ TS=[0-9.]+' \
   | sed -E 's/PR=([0-9]+) TS=([0-9.]+)/\1 \2/' | sort -un > "$tsmap"
 nums=$(awk '{print $1}' "$tsmap")
-if [ -z "$nums" ]; then botlog "read: 0 PR numbers (raw: $(printf '%s' "$raw" | tr '\n' ' ' | head -c140))"; : > "$QUEUE_FILE"; exit 0; fi
 
-# pending = every request PR > floor not yet handled (uncapped) — this is the review queue
-pending=$(printf '%s\n' $nums | grep -oE '[0-9]+' | sort -un | awk -v f="$FLOOR" '$1+0 > f+0' | comm -23 - <(sort -un "$SEEN"))
-[ -z "$pending" ] && { : > "$QUEUE_FILE"; exit 0; }
-
-# Review only CI-green PRs. Iterate candidates (not a pre-capped slice) so a green PR
-# isn't blocked behind pending ones; cap CI probes to bound gh calls. A not-green PR
-# (pending/failing/unknown) is left UNSEEN → re-checked next tick. Record each PR's
-# status into the queue file (`<PR> <status>`) so the dashboard shows *why* it waits.
-qtmp="$(mktemp)"; checks=0; CHECK_CAP=$(( MAX_PER_TICK * 4 ))
-for N in $(printf '%s\n' $pending | grep -oE '[0-9]+'); do
-  status="waiting"
-  if [ "$budget" -gt 0 ] && [ "$checks" -lt "$CHECK_CAP" ]; then
-    checks=$((checks+1)); ci="$(ci_state "$N")"; status="$ci"
-    case "$ci" in
-      green|none)
-        ts=$(awk -v n="$N" '$1==n{print $2; exit}' "$tsmap")
-        budget=$((budget-1)); do_review "$N" "$ts" "review"; bash "$D/mark-handled.sh" "$N" >/dev/null ;;
-      *) botlog "hold #$N — CI $ci" ;;
-    esac
+# ── discover: add new channel PRs to the persistent queue, mark them seen so the
+#    channel won't re-surface them (queue is now the source of truth, re-checked every tick).
+if [ -n "$nums" ]; then
+  pending=$(printf '%s\n' $nums | grep -oE '[0-9]+' | sort -un | awk -v f="$FLOOR" '$1+0 > f+0' | comm -23 - <(sort -un "$SEEN"))
+  if [ -n "$pending" ]; then
+    for N in $(printf '%s\n' $pending | grep -oE '[0-9]+'); do
+      [ -f "$QDIR/$N" ] || { ts=$(awk -v n="$N" '$1==n{print $2; exit}' "$tsmap"); printf '%s\n' "$ts" > "$QDIR/$N"; }
+    done
+    bash "$D/mark-handled.sh" $pending >/dev/null
+    botlog "queued: $(echo $pending | tr '\n' ' ')"
   fi
-  printf '%s %s\n' "$N" "$status" >> "$qtmp"
+else
+  botlog "read: 0 PR numbers (raw: $(printf '%s' "$raw" | tr '\n' ' ' | head -c140))"
+fi
+
+# ── process the persistent queue EVERY tick (independent of the Slack window):
+#    review CI-green PRs, re-check the rest. One gh call per PR (state+ci); reads capped.
+qtmp="$(mktemp)"; checks=0; READ_CAP=$(( MAX_PER_TICK * 8 ))
+for f in "$QDIR"/*; do
+  [ -e "$f" ] || continue
+  N=$(basename "$f"); read -r qts < "$f" || true
+  if [ "$checks" -ge "$READ_CAP" ]; then printf '%s %s\n' "$N" "waiting" >> "$qtmp"; continue; fi
+  checks=$((checks+1))
+  gate="$(pr_gate "$N")"; state="${gate%% *}"; ci="${gate##* }"
+  if [ -z "$state" ]; then printf '%s %s\n' "$N" "unknown" >> "$qtmp"; continue; fi   # gh blip → keep, retry
+  if [ "$state" != "OPEN" ]; then rm -f "$f"; botlog "dequeue #$N (state $state)"; continue; fi
+  if { [ "$ci" = "green" ] || [ "$ci" = "none" ]; } && [ "$budget" -gt 0 ]; then
+    budget=$((budget-1)); do_review "$N" "$qts" "review"; rm -f "$f"
+  else
+    printf '%s %s\n' "$N" "$ci" >> "$qtmp"   # still queued (CI not green yet, or budget spent this tick)
+  fi
 done
 mv "$qtmp" "$QUEUE_FILE"
 botlog "tick complete"

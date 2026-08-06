@@ -55,8 +55,9 @@ SEEN="$STATE_DIR/seen_prs.txt"      # handled PR numbers
 LOCK="$STATE_DIR/tick.lock"         # atomic mkdir mutex; mtime = acquire time
 DISABLED="$STATE_DIR/DISABLED"      # presence => paused
 FLOOR_FILE="$STATE_DIR/floor"       # ignore PRs <= this
-QUEUE_FILE="$STATE_DIR/queue"       # PRs found awaiting review (uncapped), refreshed each tick
-mkdir -p "$WATCH_DIR" "$VERDICT_DIR" "$AUTHORS_DIR" "$LOG_DIR" 2>/dev/null || true
+QUEUE_FILE="$STATE_DIR/queue"       # flat "<PR> <status>" view for the dashboard, rewritten each tick
+QDIR="$STATE_DIR/queue.d"           # persistent review queue: one file per PR awaiting first review ("<ts>")
+mkdir -p "$WATCH_DIR" "$VERDICT_DIR" "$AUTHORS_DIR" "$QDIR" "$LOG_DIR" 2>/dev/null || true
 touch "$SEEN" 2>/dev/null || true
 
 FLOOR="${FLOOR:-0}"
@@ -85,3 +86,16 @@ ci_state(){
   echo "${out:-unknown}"
 }
 ci_reviewable(){ case "$(ci_state "$1")" in green|none) return 0;; *) return 1;; esac; }
+# One gh call → "<state> <ci>" (e.g. "OPEN green", "MERGED none"). Empty on gh failure.
+pr_gate(){
+  "$GH_BIN" pr view "$1" --repo "$REPO_SLUG" --json state,statusCheckRollup --jq '
+    (.state // "") + " " + ((.statusCheckRollup // []) as $c
+      | if ($c|length)==0 then "none"
+        elif any($c[]; ((.status // "COMPLETED")|ascii_upcase) as $s
+                       | ($s=="IN_PROGRESS" or $s=="QUEUED" or $s=="PENDING" or $s=="WAITING")
+                         or ((.state // "")|ascii_upcase)=="PENDING") then "pending"
+        elif any($c[]; ((.conclusion // .state // "")|ascii_upcase) as $r
+                       | ($r=="FAILURE" or $r=="ERROR" or $r=="TIMED_OUT" or $r=="CANCELLED"
+                          or $r=="ACTION_REQUIRED" or $r=="STARTUP_FAILURE")) then "failing"
+        else "green" end)' 2>/dev/null
+}
