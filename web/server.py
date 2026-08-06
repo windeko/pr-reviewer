@@ -125,7 +125,9 @@ def verdict_of(st, pr):
 
 def au(st, pr):
     v = verdict_of(st, pr)
-    return (v[1] if v else "") or "—"
+    if v and v[1]:
+        return v[1]
+    return read(os.path.join(st, "authors", str(pr))) or "—"
 
 
 def recent_reviews(st, limit=25):

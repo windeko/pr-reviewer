@@ -49,13 +49,14 @@ REPO_DIR="${REPO_DIR/#\~/$HOME}"
 STATE_DIR="$DATA_DIR/state"
 LOG_DIR="$DATA_DIR/logs"
 WATCH_DIR="$STATE_DIR/watching"     # one file per PR awaiting re-review: "<headSHA> <ts>"
-VERDICT_DIR="$STATE_DIR/verdicts"   # one file per PR: "<epoch>\t<emoji> PR N: WORD — short"
+VERDICT_DIR="$STATE_DIR/verdicts"   # one file per PR: "<epoch>\t<author>\t<emoji> PR N: WORD — short"
+AUTHORS_DIR="$STATE_DIR/authors"    # one file per PR: gh author login (stashed at review start)
 SEEN="$STATE_DIR/seen_prs.txt"      # handled PR numbers
 LOCK="$STATE_DIR/tick.lock"         # atomic mkdir mutex; mtime = acquire time
 DISABLED="$STATE_DIR/DISABLED"      # presence => paused
 FLOOR_FILE="$STATE_DIR/floor"       # ignore PRs <= this
 QUEUE_FILE="$STATE_DIR/queue"       # PRs found awaiting review (uncapped), refreshed each tick
-mkdir -p "$WATCH_DIR" "$VERDICT_DIR" "$LOG_DIR" 2>/dev/null || true
+mkdir -p "$WATCH_DIR" "$VERDICT_DIR" "$AUTHORS_DIR" "$LOG_DIR" 2>/dev/null || true
 touch "$SEEN" 2>/dev/null || true
 
 FLOOR="${FLOOR:-0}"

@@ -26,6 +26,7 @@ trap 'rm -rf "$PLOCK"' EXIT
 # PR state + author in one call
 prinfo="$("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json state,author --jq '.state+" "+.author.login' 2>/dev/null)"
 prstate="${prinfo%% *}"; author="${prinfo##* }"
+[ -n "$author" ] && printf '%s\n' "$author" > "$AUTHORS_DIR/$N" 2>/dev/null || true  # so running PRs show author
 # skip already merged/closed (nothing to review). gh read failure (empty) → fall through and review.
 if [ -n "$prstate" ] && [ "$prstate" != "OPEN" ]; then
   write_verdict "⏭️" "SKIP" "already $prstate by someone"
