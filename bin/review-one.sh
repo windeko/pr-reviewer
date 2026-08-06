@@ -14,8 +14,8 @@ D="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$D/lib.sh"
 N="${1:?PR number required}"; ts="${2:-}"; label="${3:-manual}"; known_head="${4:-}"
 case "$N" in *[!0-9]*|'') echo "bad PR: $N" >&2; exit 2;; esac
 react(){ [ -n "$ts" ] && bash "$D/slack-react.sh" "$1" "$ts" "$2"; }
-# verdict file: "<epoch>\t<emoji> PR <N>: <WORD> — <short>"
-write_verdict(){ printf '%s\t%s PR %s: %s — %s\n' "$(date +%s)" "$1" "$N" "$2" "$3" > "$VERDICT_DIR/$N"; }
+# verdict file: "<epoch>\t<author>\t<emoji> PR <N>: <WORD> — <short>"
+write_verdict(){ printf '%s\t%s\t%s PR %s: %s — %s\n' "$(date +%s)" "${author:-unknown}" "$1" "$N" "$2" "$3" > "$VERDICT_DIR/$N"; }
 
 cd "$REPO_DIR" || { botlog "$label #$N: no repo $REPO_DIR"; exit 1; }
 
