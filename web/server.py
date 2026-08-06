@@ -180,9 +180,9 @@ def page(active, flash=""):
         f'<a class="tab{" act" if n == active else ""}" href="?repo={n}">{html.escape(n)}</a>'
         for n in names)
     link = f"https://github.com/{slug}/pull"
-    qlab = {"pending": "🟡 CI pending", "failing": "🚫 CI failing", "unknown": "❔ CI unknown"}
+    qlab = {"pending": "⏳ CI pending", "failing": "🚫 CI failing", "unknown": "❔ CI unknown"}
     queue_rows = "".join(
-        f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td><td>⏳ running</td></tr>' for pr in inrev
+        f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td><td>▶️ running</td></tr>' for pr in inrev
     ) + "".join(
         f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(au(st, pr))}</td>'
         f'<td class="{"dim" if s not in qlab else ""}">{qlab.get(s, "queued")}</td></tr>' for pr, s in items
