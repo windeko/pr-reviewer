@@ -12,7 +12,7 @@ trap 'bash "$D/tick-done.sh" >/dev/null 2>&1' EXIT
 cd "$REPO_DIR" || { botlog "no repo $REPO_DIR"; exit 1; }
 
 budget=$MAX_PER_TICK   # total reviews this tick (new + re-review)
-do_review(){ bash "$D/review-one.sh" "$1" "$2" "$3"; }
+do_review(){ bash "$D/review-one.sh" "$1" "$2" "$3" "${4:-}"; }
 
 # ── 1. re-review watched PRs whose head moved ──
 for f in "$WATCH_DIR"/*; do
@@ -29,7 +29,7 @@ for f in "$WATCH_DIR"/*; do
   fi
   if [ -n "$cur" ] && [ "$cur" != "$stored_sha" ]; then
     [ "$budget" -le 0 ] && { botlog "re-review #$N deferred (cap)"; continue; }
-    budget=$((budget-1)); do_review "$N" "$stored_ts" "re-review"
+    budget=$((budget-1)); do_review "$N" "$stored_ts" "re-review" "$cur"
   fi
 done
 

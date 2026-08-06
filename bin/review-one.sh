@@ -11,7 +11,7 @@
 # re-reviews. Per-PR lock prevents double-review.
 set -u
 D="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$D/lib.sh"
-N="${1:?PR number required}"; ts="${2:-}"; label="${3:-manual}"
+N="${1:?PR number required}"; ts="${2:-}"; label="${3:-manual}"; known_head="${4:-}"
 case "$N" in *[!0-9]*|'') echo "bad PR: $N" >&2; exit 2;; esac
 react(){ [ -n "$ts" ] && bash "$D/slack-react.sh" "$1" "$ts" "$2"; }
 # verdict file: "<epoch>\t<emoji> PR <N>: <WORD> — <short>"
@@ -71,15 +71,20 @@ case "$vline" in
   *)                                     verdict="" ;;
 esac
 
-# head SHA for the watch-list; also a gh review-state fallback if there was no Verdict line.
-me="$("$GH_BIN" api user --jq .login 2>/dev/null)"
-head=""; ghstate=""
-for _try in 1 2 3; do
-  read -r head ghstate < <("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json headRefOid,reviews \
-    --jq --arg me "$me" '.headRefOid+" "+(([.reviews[]|select(.author.login==$me)]|last|.state)//"")' 2>/dev/null)
-  [ -n "$head" ] && break
-  sleep 3
-done
+# head SHA for the watch-list: prefer the head the rescan already read (re-reviews),
+# else one retried gh read. gh review-state used only as a fallback when no Verdict line.
+head="$known_head"; ghstate=""
+if [ -z "$head" ] || [ -z "$verdict" ]; then
+  me="$("$GH_BIN" api user --jq .login 2>/dev/null)"
+  for _try in 1 2 3; do
+    read -r _h _s < <("$GH_BIN" pr view "$N" --repo "$REPO_SLUG" --json headRefOid,reviews \
+      --jq --arg me "$me" '.headRefOid+" "+(([.reviews[]|select(.author.login==$me)]|last|.state)//"")' 2>/dev/null)
+    [ -z "$head" ] && [ -n "$_h" ] && head="$_h"
+    [ -n "$_s" ] && ghstate="$_s"
+    [ -n "$head" ] && break
+    sleep 3
+  done
+fi
 if [ -z "$verdict" ] && [ -n "$ghstate" ]; then
   [ "$ghstate" = "APPROVED" ] && verdict="APPROVED" || verdict="CHANGES"
 fi
@@ -93,10 +98,14 @@ case "$verdict" in
     botlog "$label #$N done — ✅ APPROVED (author ${author:-?})" ;;
   CHANGES)
     react add no_entry_sign                        # 🚫
-    # always arm for re-review; if head unreadable now (flaky gh), store empty → the
-    # rescan baselines it to the current head next tick (never silently un-armed).
-    printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"
-    [ -z "$head" ] && botlog "$label #$N: CHANGES, head SHA unreadable — armed, rescan will baseline"
+    # arm for re-review. With a known head, store it. If head unreadable, don't clobber
+    # an existing good SHA — only drop a placeholder when not yet watched (rescan baselines).
+    if [ -n "$head" ]; then
+      printf '%s %s\n' "$head" "$ts" > "$WATCH_DIR/$N"
+    elif [ ! -f "$WATCH_DIR/$N" ]; then
+      printf ' %s\n' "$ts" > "$WATCH_DIR/$N"
+      botlog "$label #$N: CHANGES, head unreadable — armed (baseline pending)"
+    fi
     write_verdict "🚫" "REJECTED" "$short"
     botlog "$label #$N done — 🚫 REJECTED (author ${author:-?})" ;;
   *)
