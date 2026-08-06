@@ -182,7 +182,7 @@ def page(active, flash=""):
         for pr, sha in watch
     ) or '<tr><td colspan="3" class="dim">nothing awaiting re-review</td></tr>'
     rev_rows = "".join(
-        f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(author)}</td><td>{html.escape(v)}</td>'
+        f'<tr><td><a href="{link}/{pr}" target="_blank">#{pr}</a></td><td class="dim">{html.escape(author or "—")}</td><td>{html.escape(v)}</td>'
         f'<td class="dim">{when}</td></tr>' for pr, author, v, when in reviews
     ) or '<tr><td colspan="4" class="dim">no reviews yet</td></tr>'
     flash_html = f'<div class="flash">{html.escape(flash)}</div>' if flash else ""
