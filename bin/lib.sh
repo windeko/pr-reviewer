@@ -25,6 +25,7 @@ REPO_DIR="${REPO_DIR:?set REPO_DIR (local checkout path)}"
 SLACK_CHANNEL="${SLACK_CHANNEL:?set SLACK_CHANNEL}"
 OWN_LOGIN="${OWN_LOGIN:-}"
 SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"   # bot token w/ reactions:write; empty => reactions off
+SLACK_NOTIFY="${SLACK_NOTIFY:-true}"     # false => post nothing to Slack after a review (no reactions/reply)
 READ_COUNT="${READ_COUNT:-30}"
 MAX_PER_TICK="${MAX_PER_TICK:-5}"
 INTERVAL_SECS="${INTERVAL_SECS:-180}"

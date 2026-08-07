@@ -13,7 +13,7 @@ set -u
 D="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$D/lib.sh"
 N="${1:?PR number required}"; ts="${2:-}"; label="${3:-manual}"; known_head="${4:-}"
 case "$N" in *[!0-9]*|'') echo "bad PR: $N" >&2; exit 2;; esac
-react(){ [ -n "$ts" ] && bash "$D/slack-react.sh" "$1" "$ts" "$2"; }
+react(){ [ "$SLACK_NOTIFY" = "true" ] && [ -n "$ts" ] && bash "$D/slack-react.sh" "$1" "$ts" "$2"; }
 # verdict file: "<epoch>\t<author>\t<emoji> PR <N>: <WORD> — <short>"
 write_verdict(){ printf '%s\t%s\t%s PR %s: %s — %s\n' "$(date +%s)" "${author:-unknown}" "$1" "$N" "$2" "$3" > "$VERDICT_DIR/$N"; }
 
@@ -47,7 +47,7 @@ fi
 
 # No bot token → have Claude post a one-line threaded reply via the Slack MCP.
 slack_step=""
-if [ -z "${SLACK_BOT_TOKEN:-}" ] && [ -n "$ts" ]; then
+if [ "$SLACK_NOTIFY" = "true" ] && [ -z "${SLACK_BOT_TOKEN:-}" ] && [ -n "$ts" ]; then
   slack_step="Then use the Slack MCP to post ONE short threaded reply to the message at thread_ts=$ts in channel $SLACK_CHANNEL: a single line starting with ✅ if you approved (no breaking changes) or 🚫 if you requested changes, then a few words of why and the PR link."
 fi
 
